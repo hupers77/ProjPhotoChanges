@@ -21,6 +21,7 @@
     </div>
     <div class="top-actions">
       <span id="top-progress" class="top-progress"></span>
+      <button type="button" id="donate-open" class="ghost donate-btn" title="이 프로그램을 후원합니다">♥ 후원하기</button>
       <button type="button" id="install-app" class="ghost" hidden title="이 앱을 컴퓨터에 설치합니다">앱으로 설치</button>
       <button type="button" id="cancel-top" class="ghost" hidden>중지</button>
       <button type="button" id="run-top" class="primary" disabled>변환하고 저장</button>
@@ -111,7 +112,7 @@
             <option value="270">왼쪽으로 90°</option>
           </select>
         </label>
-        <label class="check"><input type="checkbox" id="fx-autolevel"> 자동 레벨 <span class="explain">(어둡거나 뿌연 사진의 밝기 범위를 넓힘)</span></label>
+        <label class="check"><input type="checkbox" id="fx-autolevel"> <span>자동 레벨 <span class="explain">(어둡거나 뿌연 사진의 밝기 범위를 넓힘)</span></span></label>
         <label class="row">선명하게 <span class="unit"><input type="range" id="fx-sharpen" min="0" max="100" step="5"> <output id="fx-sharpen-out"></output></span></label>
         <p class="hint">줄인 사진은 조금 흐려 보일 수 있어 20~40 정도를 권합니다. 서명과 EXIF 글자에는 적용되지 않습니다.</p>
       </fieldset>
@@ -261,6 +262,33 @@
       </div>
     </aside>
   </main>
+
+  <dialog id="donate" class="donate" aria-labelledby="donate-title">
+    <form method="dialog" class="donate-close-row"><button class="ghost small" aria-label="닫기">닫기 ✕</button></form>
+    <h2 id="donate-title">포토웍스 웹 후원하기</h2>
+    <p class="hint">이 프로그램이 도움이 되셨다면 커피 한 잔으로 응원해 주세요. 후원 방법을 고르세요.</p>
+    <div class="donate-tabs" role="tablist">
+      <button type="button" role="tab" id="tab-kakao" aria-selected="true" aria-controls="panel-kakao">카카오페이</button>
+      <button type="button" role="tab" id="tab-github" aria-selected="false" aria-controls="panel-github">GitHub Sponsors</button>
+    </div>
+
+    <section id="panel-kakao" role="tabpanel" aria-labelledby="tab-kakao">
+      <a id="kakao-pay-link" class="primary donate-pay" href="https://qr.kakaopay.com/Ej9H7kdOT9c404930" target="_blank" rel="noopener" hidden>카카오페이로 5,000원 송금하기</a>
+      <img class="donate-qr" src="img/kakaopay-qr.png" alt="카카오페이 송금 QR 코드 (5,000원)" width="508" height="484">
+      <p class="hint" id="kakao-hint">휴대폰 카메라로 위 QR 코드를 찍으면 카카오페이 송금 화면이 열립니다.</p>
+      <div class="donate-share">
+        <input type="text" id="kakao-url" readonly value="https://qr.kakaopay.com/Ej9H7kdOT9c404930" aria-label="카카오페이 송금 주소">
+        <button type="button" id="kakao-copy" class="ghost">주소 복사</button>
+        <button type="button" id="kakao-share" class="ghost" hidden>공유</button>
+      </div>
+      <p class="hint" id="kakao-desktop-hint">카카오페이 송금 링크는 휴대폰에서만 열립니다. 컴퓨터에서는 주소를 복사해 카카오톡 등으로 휴대폰에 보내 열어 주세요.</p>
+    </section>
+
+    <section id="panel-github" role="tabpanel" aria-labelledby="tab-github" hidden>
+      <p class="donate-soon">준비 중</p>
+      <p class="hint">GitHub Sponsors (for international supporters) is coming soon. 해외 후원자를 위한 GitHub Sponsors는 승인 절차가 끝나면 열립니다.</p>
+    </section>
+  </dialog>
 
   <script type="module" src="js/main.js"></script>
 </body>

@@ -609,6 +609,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape' && running) { cancelRequested = true; return; }
   const t = e.target;
+  if ($('donate').open) return;
   if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.('input, textarea, select, [contenteditable]')) return;
   if (e.key === 'ArrowLeft') { e.preventDefault(); stepPreview(-1); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); stepPreview(1); }
@@ -636,6 +637,37 @@ window.addEventListener('appinstalled', () => { $('install-app').hidden = true; 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* works without offline support */ });
 }
+
+// ---------- donation ----------
+
+// Kakao Pay's link only opens on phones; on a computer the QR code is the way in.
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)); // iPadOS
+$('kakao-pay-link').hidden = !isMobile;
+$('kakao-desktop-hint').hidden = isMobile;
+if (isMobile) $('kakao-hint').textContent = '위 버튼을 누르면 카카오페이 송금 화면이 열립니다. 다른 휴대폰으로는 QR 코드를 찍어도 됩니다.';
+$('kakao-share').hidden = !navigator.share;
+
+function selectDonateTab(which) {
+  for (const k of ['kakao', 'github']) {
+    $(`tab-${k}`).setAttribute('aria-selected', String(k === which));
+    $(`panel-${k}`).hidden = k !== which;
+  }
+}
+$('tab-kakao').addEventListener('click', () => selectDonateTab('kakao'));
+$('tab-github').addEventListener('click', () => selectDonateTab('github'));
+$('donate-open').addEventListener('click', () => { selectDonateTab('kakao'); $('donate').showModal(); });
+$('donate').addEventListener('click', (e) => { if (e.target === $('donate')) $('donate').close(); }); // backdrop
+$('kakao-copy').addEventListener('click', async () => {
+  const url = $('kakao-url').value;
+  try { await navigator.clipboard.writeText(url); }
+  catch { $('kakao-url').select(); document.execCommand('copy'); }
+  $('kakao-copy').textContent = '복사됨';
+  setTimeout(() => { $('kakao-copy').textContent = '주소 복사'; }, 1500);
+});
+$('kakao-share').addEventListener('click', () => {
+  navigator.share({ title: '포토웍스 웹 후원 (카카오페이)', url: $('kakao-url').value }).catch(() => {});
+});
 
 // ---------- presets ----------
 

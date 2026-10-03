@@ -224,3 +224,30 @@ button.ghost.small { padding: 1px 8px; font-size: 12px; border-radius: 6px; }
 .settings-pane.compact .preset-actions { margin-top: 4px; }
 .settings-pane.compact input[type=number], .settings-pane.compact input[type=text], .settings-pane.compact select { padding: 3px 8px; }
 .settings-pane.compact .actions { margin-top: 6px; }
+
+.donate-btn { color: #db2777; border-color: #f9a8d4 !important; font-weight: 600; }
+.donate-btn:hover { background: #fdf2f8; }
+.donate {
+  width: min(440px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px 20px 20px; background: var(--panel); color: var(--text);
+  max-height: calc(100dvh - 32px); overflow-y: auto;
+}
+.donate::backdrop { background: rgba(0,0,0,.45); }
+.donate h2 { margin: 0 0 4px; font-size: 18px; }
+.donate-close-row { display: flex; justify-content: flex-end; margin: 0; }
+.donate-tabs { display: flex; gap: 6px; margin: 12px 0; }
+.donate-tabs button {
+  flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; font-weight: 600;
+}
+.donate-tabs button[aria-selected=true] { background: #fee500; border-color: #e6cf00; color: #191919; }
+.donate-tabs #tab-github[aria-selected=true] { background: var(--text); border-color: var(--text); color: var(--panel); }
+.donate section { text-align: center; }
+.donate-amount { font-size: 22px; font-weight: 800; margin: 4px 0 8px; }
+.donate-qr { display: block; margin-top: 4px; width: 100%; max-width: 300px; height: auto; margin: 0 auto; border-radius: 10px; background: #fff; }
+.donate-pay {
+  display: block; margin: 0 0 12px; padding: 12px; border-radius: 10px; text-decoration: none;
+  background: #fee500 !important; color: #191919 !important; font-weight: 800;
+}
+.donate-share { display: flex; gap: 6px; margin-top: 10px; }
+.donate-share input { flex: 1; min-width: 0; font-size: 12px; }
+.donate-soon { font-size: 20px; font-weight: 800; color: var(--muted); margin: 24px 0 8px; }

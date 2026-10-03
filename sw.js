@@ -1,13 +1,13 @@
 // Offline support: always try the network first so updates show up right
 // away, and fall back to the last copy when offline.
 
-const CACHE = 'photoworks-web-v1';
+const CACHE = 'photoworks-web-v2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/main.js', 'js/settings.js', 'js/presets.js', 'js/pipeline.js', 'js/resize.js', 'js/effects.js',
   'js/dpi.js', 'js/exif.js', 'js/overlay.js', 'js/filename.js', 'js/exporter.js', 'js/pool.js',
   'js/worker.js', 'js/fonts.js',
-  'img/icon.svg', 'img/icon-32.png', 'img/icon-180.png', 'img/icon-192.png', 'img/icon-512.png',
+  'img/icon.svg', 'img/icon-32.png', 'img/icon-180.png', 'img/icon-192.png', 'img/icon-512.png', 'img/kakaopay-qr.png',
 ];
 
 self.addEventListener('install', (e) => {
