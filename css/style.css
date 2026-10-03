@@ -175,3 +175,7 @@ button.ghost:disabled { opacity: .45; cursor: default; }
 .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
 .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 #progress-text { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+.presets select { width: 100%; }
+.preset-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.preset-actions button.ghost { padding: 4px 10px; font-size: 13px; }

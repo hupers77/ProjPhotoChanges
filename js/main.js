@@ -1,10 +1,12 @@
-import { loadSettings, saveSettings } from './settings.js';
+import { loadSettings, saveSettings, assignSettings, cloneDefaults } from './settings.js';
 import { computeTargetSize } from './resize.js';
 import { buildFileName } from './filename.js';
 import { processFile, outputMime, registerOverlay, loadPreviewBase, renderPreview } from './pipeline.js';
 import { canPickFolder, createSaver } from './exporter.js';
 import { readExif, exifTokens, photoDate, TOKEN_NAMES } from './exif.js';
 import { drawOverlays, setSignatureImage, getSignatureImage } from './overlay.js';
+import { createPool } from './pool.js';
+import { listPresets, getPreset, savePreset, deletePreset, presetSettings, exportPresetsBlob, importPresetsFile } from './presets.js';
 
 registerOverlay(drawOverlays);
 
@@ -17,6 +19,7 @@ const items = [];
 let nextId = 1;
 let running = false;
 let cancelRequested = false;
+let pool = null;          // background workers, once ready (null = do it on the page)
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif|tiff?)$/i;
 const isImage = (f) => (f.type && f.type.startsWith('image/')) || IMAGE_EXT.test(f.name);
@@ -240,7 +243,7 @@ function removeItem(it) {
 const thumbQueue = [];
 let thumbActive = 0;
 function pumpThumbs() {
-  while (thumbActive < 2 && thumbQueue.length) {
+  while (thumbActive < (pool ? pool.size : 2) && thumbQueue.length) {
     const it = thumbQueue.shift();
     if (it.removed) continue;
     thumbActive++;
@@ -249,6 +252,14 @@ function pumpThumbs() {
 }
 async function makeThumb(it) {
   const img = it.el.querySelector('img');
+  if (pool) {
+    try {
+      const t = await pool.run('thumb', { file: it.file, maxEdge: 320 }, 'low');
+      it.width = t.width; it.height = t.height;
+      if (!it.removed) { img.src = URL.createObjectURL(t.blob); updateDims(it); }
+      return;
+    } catch { /* fall back to the page below */ }
+  }
   try {
     const bmp = await createImageBitmap(it.file, { imageOrientation: 'from-image' });
     it.width = bmp.width; it.height = bmp.height;
@@ -317,6 +328,9 @@ function schedulePreview() {
 // ---------- signature image ----------
 
 const SIG_IMAGE_KEY = 'photoworks-web:signature-image:v1';
+let signatureDataUrl = null; // what presets store
+
+const dataUrlToBlob = async (url) => (await fetch(url)).blob();
 
 async function useSignatureImage(blob, remember) {
   let bmp;
@@ -331,6 +345,8 @@ async function useSignatureImage(blob, remember) {
     r.readAsDataURL(blob);
   });
   setSignatureImage(bmp);
+  signatureDataUrl = dataUrl;
+  pool?.setSignature(blob);
   $('sig-image-thumb').src = dataUrl;
   let hint = `${bmp.width}×${bmp.height} 이미지. 배경이 투명한 PNG가 가장 잘 어울립니다.`;
   if (remember) {
@@ -350,6 +366,8 @@ $('sig-image-input').addEventListener('change', e => {
 });
 $('sig-image-clear').addEventListener('click', () => {
   setSignatureImage(null);
+  signatureDataUrl = null;
+  pool?.setSignature(null);
   try { localStorage.removeItem(SIG_IMAGE_KEY); } catch { /* ignore */ }
   $('sig-image-thumb').removeAttribute('src');
   $('sig-image-hint').textContent = '배경이 투명한 PNG가 가장 잘 어울립니다.';
@@ -360,7 +378,7 @@ async function restoreSignatureImage() {
   let dataUrl = null;
   try { dataUrl = localStorage.getItem(SIG_IMAGE_KEY); } catch { /* ignore */ }
   if (!dataUrl) return;
-  try { await useSignatureImage(await (await fetch(dataUrl)).blob(), false); } catch { /* ignore */ }
+  try { await useSignatureImage(await dataUrlToBlob(dataUrl), false); } catch { /* ignore */ }
 }
 
 // ---------- intake: drag & drop, pickers ----------
@@ -434,14 +452,24 @@ async function run() {
 
   running = true; cancelRequested = false;
   $('cancel').hidden = false;
+  setPresetButtons();
   updateCount();
+  const startedAt = performance.now();
   const queue = [...items];
   const total = queue.length;
   let done = 0, failed = 0, next = 0;
   queue.forEach(it => setStatus(it, '대기'));
   setProgress(0, total, 0);
 
-  // Encode up to 2 photos at once, but write them strictly in list order so
+  // Background workers if available, else 2 at a time on the page.
+  // A photo a worker can't handle (e.g. HEIC that only <img> decodes) is retried on the page.
+  const lanes = pool ? pool.size : 2;
+  const opts = structuredClone(settings);
+  const convert = (it, index) => (pool
+    ? pool.run('process', { file: it.file, index, settings: opts }).catch(() => processFile(it.file, index, opts))
+    : processFile(it.file, index, opts));
+
+  // Encode several photos at once, but write them strictly in list order so
   // downloads and duplicate-name checks happen one by one, first photo first.
   const savedTurn = [];
   const turn = (i) => savedTurn[i] || (savedTurn[i] = Promise.resolve());
@@ -453,7 +481,7 @@ async function run() {
       savedTurn[index + 1] = new Promise(r => { release = r; });
       setStatus(it, '변환 중…');
       try {
-        const out = await processFile(it.file, index, settings);
+        const out = await convert(it, index);
         await turn(index);
         const finalName = await saver.save(out.name, out.blob);
         setStatus(it, `저장됨: ${finalName}`, 'done');
@@ -468,21 +496,136 @@ async function run() {
       setProgress(done, total, failed);
     }
   }
-  await Promise.all([worker(), worker()]);
+  await Promise.all(Array.from({ length: lanes }, worker));
+  const secs = ((performance.now() - startedAt) / 1000).toFixed(1);
 
   if (cancelRequested) {
     queue.slice(next).forEach(it => setStatus(it, '중지됨'));
     $('progress-text').textContent += ' · 중지됨';
   } else {
-    $('progress-text').textContent = `완료: ${total - failed}장 저장${failed ? `, ${failed}장 실패` : ''}`;
+    $('progress-text').textContent = `완료: ${total - failed}장 저장${failed ? `, ${failed}장 실패` : ''} (${secs}초)`;
   }
   running = false;
   $('cancel').hidden = true;
+  setPresetButtons();
   updateCount();
 }
 
 $('run').addEventListener('click', run);
 $('cancel').addEventListener('click', () => { cancelRequested = true; });
+
+// ---------- presets ----------
+
+let currentPreset = '';
+
+function fillPresetSelect() {
+  const sel = $('preset-select');
+  sel.innerHTML = '';
+  const first = new Option(listPresets().length ? '프리셋 고르기…' : '저장된 프리셋 없음', '');
+  sel.add(first);
+  for (const p of listPresets()) sel.add(new Option(p.name, p.name));
+  sel.value = getPreset(currentPreset) ? currentPreset : '';
+  setPresetButtons();
+}
+
+function setPresetButtons() {
+  const has = !!$('preset-select').value;
+  $('preset-delete').disabled = running || !has;
+  $('preset-select').disabled = running;
+  $('preset-save').disabled = running;
+  $('preset-reset').disabled = running;
+  $('preset-import').disabled = running;
+  $('preset-export').disabled = !listPresets().length;
+}
+
+function presetHint(text) { $('preset-hint').textContent = text; }
+
+async function applySettings(next, sigDataUrl) {
+  assignSettings(settings, next);
+  if (!canPickFolder && settings.output.saveTarget === 'folder') settings.output.saveTarget = 'download';
+  saveSettings(settings);
+  fillForm();
+  refreshFormState();
+  if (sigDataUrl) {
+    try { await useSignatureImage(await dataUrlToBlob(sigDataUrl), true); } catch { /* keep the current image */ }
+  }
+}
+
+$('preset-select').addEventListener('change', async (e) => {
+  e.stopPropagation();
+  const p = getPreset(e.target.value);
+  setPresetButtons();
+  if (!p) return;
+  currentPreset = p.name;
+  await applySettings(presetSettings(p), p.signatureImage);
+  presetHint(`"${p.name}" 프리셋을 적용했습니다.`);
+});
+
+$('preset-save').addEventListener('click', () => {
+  readForm();
+  const name = prompt('프리셋 이름', currentPreset || '')?.trim();
+  if (!name) return;
+  if (getPreset(name) && !confirm(`"${name}" 프리셋이 이미 있습니다. 지금 설정으로 덮어쓸까요?`)) return;
+  const withImage = settings.signature.kind === 'image' ? signatureDataUrl : null;
+  try {
+    savePreset(name, settings, withImage);
+  } catch {
+    // Usually the signature image doesn't fit in browser storage.
+    try {
+      savePreset(name, settings, null);
+      alert('서명 이미지가 커서 프리셋에 함께 넣지 못했습니다. 나머지 설정만 저장했어요.');
+    } catch {
+      alert('브라우저 저장 공간이 부족해 프리셋을 저장하지 못했습니다.');
+      return;
+    }
+  }
+  currentPreset = name;
+  fillPresetSelect();
+  presetHint(`"${name}" 프리셋으로 저장했습니다.`);
+});
+
+$('preset-delete').addEventListener('click', () => {
+  const name = $('preset-select').value;
+  if (!name || !confirm(`"${name}" 프리셋을 지울까요?`)) return;
+  deletePreset(name);
+  if (currentPreset === name) currentPreset = '';
+  fillPresetSelect();
+  presetHint(`"${name}" 프리셋을 지웠습니다.`);
+});
+
+$('preset-reset').addEventListener('click', async () => {
+  if (!confirm('모든 설정을 처음 기본값으로 되돌릴까요? 저장된 프리셋은 그대로 남습니다.')) return;
+  currentPreset = '';
+  fillPresetSelect();
+  await applySettings(cloneDefaults(), null);
+  presetHint('기본 설정으로 되돌렸습니다.');
+});
+
+$('preset-export').addEventListener('click', () => {
+  const url = URL.createObjectURL(exportPresetsBlob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'photoworks-presets.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+});
+
+$('preset-import').addEventListener('click', () => $('preset-file').click());
+$('preset-file').addEventListener('change', async (e) => {
+  e.stopPropagation();
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const n = await importPresetsFile(f);
+    fillPresetSelect();
+    presetHint(`프리셋 ${n}개를 가져왔습니다.`);
+  } catch (err) {
+    alert(`가져오지 못했습니다: ${err?.message || err}`);
+  }
+});
 
 // ---------- init ----------
 
@@ -490,10 +633,22 @@ buildPositionGrids();
 buildChips();
 fillForm();
 restoreSignatureImage();
+fillPresetSelect();
 document.querySelector('.settings-pane').addEventListener('input', onSettingsChange);
 document.querySelector('.settings-pane').addEventListener('change', onSettingsChange);
 refreshFormState();
 updateCount();
 
 // Exposed for automated tests and later steps.
-window.photoworks = { settings, items, addFiles };
+window.photoworks = { settings, items, addFiles, get pool() { return pool; } };
+
+createPool().then(p => {
+  pool = p;
+  if (p) {
+    if (signatureDataUrl) dataUrlToBlob(signatureDataUrl).then(b => p.setSignature(b));
+    $('engine-hint').textContent = `사진 ${p.size}장을 동시에 백그라운드에서 처리합니다.`;
+    pumpThumbs();
+  } else {
+    $('engine-hint').textContent = '이 브라우저는 백그라운드 처리를 지원하지 않아 화면에서 2장씩 처리합니다.';
+  }
+});

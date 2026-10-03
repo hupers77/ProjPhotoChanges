@@ -69,6 +69,18 @@ function merge(base, saved) {
   return base;
 }
 
+// A full settings object built from defaults plus whatever valid values
+// \`saved\` carries (used for presets and imported files too).
+export function normalizeSettings(saved) {
+  return merge(cloneDefaults(), saved);
+}
+
+// Overwrite \`target\` in place so modules holding a reference see the change.
+export function assignSettings(target, source) {
+  for (const group of Object.keys(DEFAULT_SETTINGS)) Object.assign(target[group], source[group]);
+  return target;
+}
+
 export function loadSettings() {
   const settings = cloneDefaults();
   try {

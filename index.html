@@ -36,6 +36,22 @@
     </section>
 
     <aside class="settings-pane">
+      <fieldset class="presets">
+        <legend>프리셋</legend>
+        <select id="preset-select" aria-label="프리셋"></select>
+        <div class="preset-actions">
+          <button type="button" id="preset-save" class="ghost">지금 설정 저장</button>
+          <button type="button" id="preset-delete" class="ghost">삭제</button>
+          <button type="button" id="preset-reset" class="ghost">기본값으로</button>
+        </div>
+        <div class="preset-actions">
+          <button type="button" id="preset-export" class="ghost">파일로 내보내기</button>
+          <button type="button" id="preset-import" class="ghost">파일에서 가져오기</button>
+          <input type="file" id="preset-file" accept="application/json,.json" hidden>
+        </div>
+        <p class="hint" id="preset-hint">크기·서명·EXIF·저장 형식·파일 이름 설정을 이름 붙여 저장해 두고 골라 쓰세요. 서명 이미지도 함께 저장됩니다.</p>
+      </fieldset>
+
       <fieldset>
         <legend>크기 조정</legend>
         <label class="row">방식
@@ -179,6 +195,7 @@
         <button type="button" id="run" class="primary" disabled>변환하고 저장</button>
         <button type="button" id="cancel" class="ghost" hidden>중지</button>
       </div>
+      <p class="hint" id="engine-hint"></p>
       <div class="progress" id="progress" hidden>
         <div class="bar"><span id="progress-bar"></span></div>
         <p id="progress-text"></p>
