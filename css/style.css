@@ -200,3 +200,14 @@ button.ghost:disabled { opacity: .45; cursor: default; }
 .presets select { width: 100%; }
 .preset-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .preset-actions button.ghost { padding: 4px 10px; font-size: 13px; }
+
+.docs-link {
+  font-size: 13px; font-weight: 600; margin-left: 8px; padding: 2px 10px; border-radius: 999px;
+  border: 1px solid var(--accent); color: var(--accent); text-decoration: none; vertical-align: 2px;
+}
+.docs-link:hover { background: var(--accent); color: var(--accent-text); }
+.preview-nav { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+button.ghost.small { padding: 1px 8px; font-size: 12px; border-radius: 6px; }
+.font-more { margin: -2px 0 6px; text-align: right; font-size: 12px; }
+#sig-font, #exif-font { max-width: 170px; }
+.summary { color: var(--ok); }

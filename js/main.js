@@ -1,7 +1,7 @@
 import { loadSettings, saveSettings, assignSettings, cloneDefaults } from './settings.js';
-import { computeTargetSize } from './resize.js';
 import { buildFileName } from './filename.js';
-import { processFile, outputMime, registerOverlay, loadPreviewBase, renderPreview } from './pipeline.js';
+import { processFile, outputMime, registerOverlay, loadPreviewBase, renderPreview, targetSize } from './pipeline.js';
+import { detectInstalledFonts, canListLocalFonts, listLocalFonts, localFontsGranted } from './fonts.js';
 import { canPickFolder, createSaver } from './exporter.js';
 import { readExif, exifTokens, photoDate, TOKEN_NAMES } from './exif.js';
 import { drawOverlays, setSignatureImage, getSignatureImage } from './overlay.js';
@@ -41,6 +41,10 @@ const bindings = [
   ['name-pattern', 'output', 'namePattern'],
   ['keep-exif', 'output', 'keepExif'],
   ['strip-gps', 'output', 'stripGps'],
+  ['dpi', 'output', 'dpi'],
+  ['fx-rotate', 'effects', 'rotate', Number],
+  ['fx-autolevel', 'effects', 'autoLevel'],
+  ['fx-sharpen', 'effects', 'sharpen', Number],
   ['sig-text', 'signature', 'text'],
   ['sig-image-width', 'signature', 'imageWidth', Number],
   ['exif-template', 'exifOverlay', 'template'],
@@ -123,7 +127,7 @@ function readForm() {
     if (el.type === 'checkbox') settings[group][key] = el.checked;
     else if (cast === Number) {
       const v = Number(el.value);
-      if (Number.isFinite(v) && (el.min === '0' ? v >= 0 : v > 0)) settings[group][key] = v;
+      if (Number.isFinite(v) && (el.min === '0' || 'zero' in el.dataset ? v >= 0 : v > 0)) settings[group][key] = v;
     } else settings[group][key] = el.value;
   }
   settings.signature.kind = $('sig-kind-image').checked ? 'image' : 'text';
@@ -139,10 +143,12 @@ function refreshFormState() {
   $('quality-row').hidden = fmt === 'image/png';
   $('quality-out').textContent = settings.output.quality;
   $('strip-gps').disabled = !settings.output.keepExif;
+  $('fx-sharpen-out').textContent = settings.effects.sharpen > 0 ? settings.effects.sharpen : '끔';
 
   const sample = items[0];
   const mime = sample ? outputMime(sample.file, fmt) : (fmt === 'same' ? 'image/jpeg' : fmt);
   $('exif-keep-hint').hidden = !settings.output.keepExif || mime === 'image/jpeg';
+  $('dpi-hint').hidden = settings.output.dpi === 'keep' || mime !== 'image/webp';
   $('name-example').textContent = buildFileName(settings.output.namePattern, {
     fileName: sample?.file.name || 'IMG_0001.JPG', index: 0, date: sample ? photoDate(sample.file, sample.exif) : new Date(),
   }, mime);
@@ -182,6 +188,7 @@ function onSettingsChange() {
 
 function updateCount() {
   $('file-count').textContent = `사진 ${items.length}장`;
+  updatePreviewNav();
   $('clear-all').disabled = running || items.length === 0;
   $('run').disabled = $('run-top').disabled = running || items.length === 0;
 }
@@ -189,7 +196,7 @@ function updateCount() {
 function updateDims(it) {
   const el = it.el.querySelector('.dims');
   if (!it.width) { el.textContent = '크기 읽는 중…'; return; }
-  const t = computeTargetSize(it.width, it.height, settings.resize);
+  const t = targetSize(it.width, it.height, settings);
   el.textContent = `${it.width}×${it.height} → ${t.width}×${t.height}`;
 }
 
@@ -233,7 +240,7 @@ function removeItem(it) {
   if (img.src) URL.revokeObjectURL(img.src);
   it.el.remove();
   it.removed = true;
-  if (previewItem === it) selectPreview(items[0] || null);
+  if (previewItem === it) selectPreview(items[Math.min(i, items.length - 1)] || null);
   updateCount();
   refreshFormState();
 }
@@ -291,11 +298,27 @@ let previewBase = null;   // decoded, reduced copy of previewItem
 let previewSeq = 0;
 let previewPending = false;
 
+function updatePreviewNav() {
+  const i = items.indexOf(previewItem);
+  $('preview-pos').textContent = i >= 0 ? `${i + 1} / ${items.length}` : '';
+  $('prev-photo').disabled = i <= 0;
+  $('next-photo').disabled = i < 0 || i >= items.length - 1;
+}
+
+function stepPreview(delta) {
+  const i = items.indexOf(previewItem);
+  const next = items[i + delta];
+  if (!next) return;
+  selectPreview(next);
+  next.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 async function selectPreview(it) {
   previewItem = it;
   previewBase = null;
   items.forEach(x => x.el.classList.toggle('selected', x === it));
   $('preview').hidden = !it;
+  updatePreviewNav();
   if (!it) return;
   const seq = ++previewSeq;
   $('preview-info').textContent = '불러오는 중…';
@@ -431,6 +454,12 @@ $('clear-all').addEventListener('click', () => { [...items].forEach(removeItem);
 
 // ---------- batch run ----------
 
+function formatBytes(n) {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)}GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)}MB`;
+  return `${Math.max(1, Math.round(n / 1024))}KB`;
+}
+
 function setProgress(done, total, failed) {
   $('progress').hidden = false;
   $('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
@@ -458,7 +487,7 @@ async function run() {
   const startedAt = performance.now();
   const queue = [...items];
   const total = queue.length;
-  let done = 0, failed = 0, next = 0;
+  let done = 0, failed = 0, next = 0, inBytes = 0, outBytes = 0;
   queue.forEach(it => setStatus(it, '대기'));
   setProgress(0, total, 0);
 
@@ -485,7 +514,8 @@ async function run() {
         const out = await convert(it, index);
         await turn(index);
         const finalName = await saver.save(out.name, out.blob);
-        setStatus(it, `저장됨: ${finalName}`, 'done');
+        inBytes += it.file.size; outBytes += out.blob.size;
+        setStatus(it, `저장됨: ${finalName} (${formatBytes(it.file.size)} → ${formatBytes(out.blob.size)})`, 'done');
       } catch (err) {
         failed++;
         setStatus(it, `실패: ${err?.message || err}`, 'error');
@@ -506,6 +536,11 @@ async function run() {
     $('top-progress').textContent = '중지됨';
   } else {
     $('progress-text').textContent = `완료: ${total - failed}장 저장${failed ? `, ${failed}장 실패` : ''} (${secs}초)`;
+    if (outBytes) {
+      const pct = Math.round((1 - outBytes / inBytes) * 100);
+      const change = pct >= 0 ? `${pct}% 줄어듦` : `${-pct}% 늘어남`;
+      $('progress-text').innerHTML += `<br><span class="summary">용량: 원본 ${formatBytes(inBytes)} → ${formatBytes(outBytes)} (${change})</span>`;
+    }
     $('top-progress').textContent = `완료 ${total - failed}장${failed ? ` · 실패 ${failed}장` : ''}`;
   }
   running = false;
@@ -516,6 +551,91 @@ async function run() {
 
 for (const id of ['run', 'run-top']) $(id).addEventListener('click', run);
 for (const id of ['cancel', 'cancel-top']) $(id).addEventListener('click', () => { cancelRequested = true; });
+
+// ---------- fonts ----------
+
+let installedFonts = [];
+let localFonts = [];
+const BASE_FONTS = [['sans', '고딕'], ['serif', '명조'], ['mono', '고정폭']];
+
+function fillFontSelects() {
+  const local = localFonts.filter(f => !installedFonts.includes(f));
+  for (const [p, group] of OVERLAY_GROUPS) {
+    const sel = $(`${p}-font`);
+    sel.innerHTML = '';
+    const add = (label, names) => {
+      if (!names.length) return;
+      const g = document.createElement('optgroup');
+      g.label = label;
+      for (const n of names) {
+        const [value, text] = Array.isArray(n) ? n : [n, n];
+        const o = new Option(text, value);
+        if (!Array.isArray(n)) o.style.fontFamily = `"${n}"`;
+        g.appendChild(o);
+      }
+      sel.appendChild(g);
+    };
+    add('기본', BASE_FONTS);
+    add('자주 쓰는 글꼴', installedFonts);
+    add('내 컴퓨터 글꼴', local);
+    const cur = settings[group].font;
+    // A preset from another computer may name a font this one lacks.
+    if (![...sel.options].some(o => o.value === cur)) add('저장된 설정의 글꼴', [cur]);
+    sel.value = cur;
+  }
+  document.querySelectorAll('[data-load-fonts]').forEach(b => {
+    b.hidden = !canListLocalFonts || localFonts.length > 0;
+  });
+}
+
+async function loadLocalFonts() {
+  try {
+    localFonts = await listLocalFonts();
+    fillFontSelects();
+  } catch {
+    alert('글꼴 목록을 가져오지 못했습니다. 브라우저 주소창 왼쪽의 사이트 설정에서 "글꼴" 권한을 허용해 주세요.');
+  }
+}
+
+document.querySelectorAll('[data-load-fonts]').forEach(b => b.addEventListener('click', loadLocalFonts));
+
+// ---------- keyboard ----------
+
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    if (!$('run').disabled) run();
+    return;
+  }
+  if (e.key === 'Escape' && running) { cancelRequested = true; return; }
+  const t = e.target;
+  if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.('input, textarea, select, [contenteditable]')) return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); stepPreview(-1); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); stepPreview(1); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && previewItem && !running) { e.preventDefault(); removeItem(previewItem); }
+});
+$('prev-photo').addEventListener('click', () => stepPreview(-1));
+$('next-photo').addEventListener('click', () => stepPreview(1));
+
+// ---------- install as app (PWA) ----------
+
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  $('install-app').hidden = false;
+});
+$('install-app').addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => null);
+  installPrompt = null;
+  $('install-app').hidden = true;
+});
+window.addEventListener('appinstalled', () => { $('install-app').hidden = true; });
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* works without offline support */ });
+}
 
 // ---------- presets ----------
 
@@ -547,6 +667,7 @@ async function applySettings(next, sigDataUrl) {
   assignSettings(settings, next);
   if (!canPickFolder && settings.output.saveTarget === 'folder') settings.output.saveTarget = 'download';
   saveSettings(settings);
+  fillFontSelects();
   fillForm();
   refreshFormState();
   if (sigDataUrl) {
@@ -634,7 +755,10 @@ $('preset-file').addEventListener('change', async (e) => {
 
 buildPositionGrids();
 buildChips();
+installedFonts = detectInstalledFonts();
+fillFontSelects();
 fillForm();
+localFontsGranted().then(ok => { if (ok) loadLocalFonts(); });
 restoreSignatureImage();
 fillPresetSelect();
 document.querySelector('.settings-pane').addEventListener('input', onSettingsChange);

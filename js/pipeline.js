@@ -3,7 +3,9 @@
 
 import { computeTargetSize, drawResized } from './resize.js';
 import { buildFileName } from './filename.js';
-import { readExif, exifForOutput, insertExif, exifTokens, photoDate } from './exif.js';
+import { readExif, exifForOutput, insertExif, exifTokens, photoDate, sourceDpi } from './exif.js';
+import { swapsSides, rotateCanvas, drawRotated, applyEffects } from './effects.js';
+import { applyDpi } from './dpi.js';
 
 const overlays = [];
 
@@ -15,6 +17,12 @@ const SUPPORTED_OUT = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export function outputMime(file, format) {
   if (format !== 'same') return format;
   return SUPPORTED_OUT.has(file.type) ? file.type : 'image/jpeg';
+}
+
+// Output size for a source of srcW x srcH, after the optional rotation.
+export function targetSize(srcW, srcH, settings) {
+  const swap = swapsSides(settings.effects?.rotate);
+  return computeTargetSize(swap ? srcH : srcW, swap ? srcW : srcH, settings.resize);
 }
 
 async function decode(file) {
@@ -60,21 +68,27 @@ export async function processFile(file, index, settings) {
   const exif = await readExif(file);
   const img = await decode(file);
   try {
-    const { width, height } = computeTargetSize(img.width, img.height, settings.resize);
+    const rot = settings.effects?.rotate || 0;
+    const { width, height } = targetSize(img.width, img.height, settings);
     const mime = outputMime(file, settings.output.format);
-    const canvas = drawResized(img.source, img.width, img.height, width, height);
+    const swap = swapsSides(rot);
+    const canvas = rotateCanvas(drawResized(img.source, img.width, img.height, swap ? height : width, swap ? width : height), rot);
     const ctx = canvas.getContext('2d');
     if (mime === 'image/jpeg') flattenForJpeg(ctx, width, height);
+    applyEffects(ctx, width, height, settings.effects);
 
     const meta = { srcWidth: img.width, srcHeight: img.height, exif, tokens: exifTokens(exif?.tags, file) };
     await applyOverlays(ctx, { width, height, file, index, settings, meta });
 
+    const dpi = settings.output.dpi === 'keep' ? await sourceDpi(file, exif) : Number(settings.output.dpi) || null;
     let blob = await encode(canvas, mime, settings.output.quality / 100);
     if (mime === 'image/jpeg' && settings.output.keepExif && exif?.app1) {
       try {
-        blob = await insertExif(blob, exifForOutput(exif.app1, { width, height, stripGps: settings.output.stripGps }));
+        const fixDpi = settings.output.dpi === 'keep' ? null : dpi;
+        blob = await insertExif(blob, exifForOutput(exif.app1, { width, height, stripGps: settings.output.stripGps, dpi: fixDpi }));
       } catch { /* unusual EXIF layout: save without it rather than fail */ }
     }
+    if (dpi) blob = await applyDpi(blob, mime, dpi);
     const name = buildFileName(settings.output.namePattern, {
       fileName: file.name, index, date: photoDate(file, exif),
     }, mime);
@@ -103,16 +117,20 @@ export async function loadPreviewBase(file, maxEdge = 1600) {
 
 // Draws what the saved file will look like, scaled down, into a visible canvas.
 export async function renderPreview(canvas, pb, index, settings) {
-  const { width, height } = computeTargetSize(pb.srcWidth, pb.srcHeight, settings.resize);
-  const s = Math.min(1, pb.base.width / width, pb.base.height / height);
+  const rot = settings.effects?.rotate || 0;
+  const { width, height } = targetSize(pb.srcWidth, pb.srcHeight, settings);
+  const bw = swapsSides(rot) ? pb.base.height : pb.base.width;
+  const bh = swapsSides(rot) ? pb.base.width : pb.base.height;
+  const s = Math.min(1, bw / width, bh / height);
   const pw = Math.max(1, Math.round(width * s)), ph = Math.max(1, Math.round(height * s));
   const work = document.createElement('canvas');
   work.width = pw; work.height = ph;
   const ctx = work.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(pb.base, 0, 0, pw, ph);
+  drawRotated(ctx, pb.base, rot, pw, ph);
   if (outputMime(pb.file, settings.output.format) === 'image/jpeg') flattenForJpeg(ctx, pw, ph);
+  applyEffects(ctx, pw, ph, settings.effects);
   const meta = { srcWidth: pb.srcWidth, srcHeight: pb.srcHeight, exif: pb.exif, tokens: exifTokens(pb.exif?.tags, pb.file) };
   await applyOverlays(ctx, { width: pw, height: ph, file: pb.file, index, settings, meta });
   // Swap in one step so the visible canvas never flickers half-drawn.

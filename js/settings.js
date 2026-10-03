@@ -22,6 +22,12 @@ export const DEFAULT_SETTINGS = {
     saveTarget: 'folder', // folder | download
     keepExif: true,       // copy the original EXIF into JPEG outputs
     stripGps: true,       // ...minus the GPS location
+    dpi: 'keep',          // keep | '72' | '96' | '150' | '240' | '300' | '350' (JPEG/PNG)
+  },
+  effects: {
+    rotate: 0,            // 0 | 90 | 180 | 270, clockwise
+    autoLevel: false,     // stretch the brightness range
+    sharpen: 0,           // 0 (off) - 100
   },
   // position: t|m|b + l|c|r. size/margin: % of the photo's shorter side.
   signature: {
@@ -32,7 +38,7 @@ export const DEFAULT_SETTINGS = {
     position: 'br',
     size: 4,
     margin: 3,
-    font: 'sans',         // sans | serif | mono
+    font: 'sans',         // sans | serif | mono, or any installed font family name
     bold: true,
     color: '#ffffff',
     opacity: 85,

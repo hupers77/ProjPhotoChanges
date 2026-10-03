@@ -8,6 +8,13 @@ const FONTS = {
   mono: 'ui-monospace, Menlo, "D2Coding", Consolas, monospace',
 };
 
+// Built-in keys map to stacks; anything else is an installed font's family name.
+export function fontStack(font) {
+  if (FONTS[font]) return FONTS[font];
+  const name = String(font || '').replace(/["\\]/g, '').trim();
+  return name ? `"${name}", ${FONTS.sans}` : FONTS.sans;
+}
+
 let signatureImage = null;
 export function setSignatureImage(img) { signatureImage = img; }
 export function getSignatureImage() { return signatureImage; }
@@ -52,7 +59,7 @@ function isLight(hex) {
 function textItem(ctx, lines, opt, W, H, short) {
   const margin = short * opt.margin / 100;
   let size = short * opt.size / 100;
-  const font = (px) => `${opt.bold ? 'bold ' : ''}${px}px ${FONTS[opt.font] || FONTS.sans}`;
+  const font = (px) => `${opt.bold ? 'bold ' : ''}${px}px ${fontStack(opt.font)}`;
   ctx.save();
   ctx.font = font(size);
   let widest = Math.max(...lines.map(l => ctx.measureText(l).width));

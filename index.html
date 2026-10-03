@@ -7,17 +7,21 @@
   <link rel="icon" href="img/icon.svg?v=2" type="image/svg+xml">
   <link rel="icon" href="img/icon-32.png?v=2" sizes="32x32" type="image/png">
   <link rel="apple-touch-icon" href="img/icon-180.png?v=2">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#15803d">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="topbar">
     <img class="logo" src="img/icon.svg?v=2" alt="" width="40" height="40">
     <div class="brand">
-      <h1>포토웍스 웹 <a class="author" href="http://blog.naver.com/hupers" target="_blank" rel="noopener">(@사랑나무아빠)</a></h1>
+      <h1>포토웍스 웹 <a class="author" href="http://blog.naver.com/hupers" target="_blank" rel="noopener">(@사랑나무아빠)</a>
+        <a class="docs-link" href="https://github.com/hupers77/ProjPhotoChanges#readme" target="_blank" rel="noopener">사용법(Documents)</a></h1>
       <p class="tagline">사진은 서버로 올라가지 않고 이 브라우저 안에서만 처리됩니다.</p>
     </div>
     <div class="top-actions">
       <span id="top-progress" class="top-progress"></span>
+      <button type="button" id="install-app" class="ghost" hidden title="이 앱을 컴퓨터에 설치합니다">앱으로 설치</button>
       <button type="button" id="cancel-top" class="ghost" hidden>중지</button>
       <button type="button" id="run-top" class="primary" disabled>변환하고 저장</button>
     </div>
@@ -34,9 +38,17 @@
       </div>
 
       <section id="preview" class="preview" hidden>
-        <div class="preview-head"><strong>미리보기</strong><span id="preview-info"></span></div>
+        <div class="preview-head">
+          <strong>미리보기</strong>
+          <span class="preview-nav">
+            <button type="button" id="prev-photo" class="ghost small" title="이전 사진 (←)" aria-label="이전 사진">◀</button>
+            <span id="preview-pos"></span>
+            <button type="button" id="next-photo" class="ghost small" title="다음 사진 (→)" aria-label="다음 사진">▶</button>
+          </span>
+          <span id="preview-info"></span>
+        </div>
         <div class="preview-stage"><canvas id="preview-canvas"></canvas></div>
-        <p class="hint">아래 목록에서 사진을 누르면 그 사진으로 미리 봅니다.</p>
+        <p class="hint">아래 목록에서 사진을 누르거나 ← → 키로 사진을 넘겨 봅니다. Delete 키는 보고 있는 사진을 목록에서 뺍니다.</p>
       </section>
 
       <div class="list-head">
@@ -88,6 +100,21 @@
       </fieldset>
 
       <fieldset>
+        <legend>보정</legend>
+        <label class="row">회전
+          <select id="fx-rotate" data-zero>
+            <option value="0">안 함</option>
+            <option value="90">오른쪽으로 90°</option>
+            <option value="180">180°</option>
+            <option value="270">왼쪽으로 90°</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="fx-autolevel"> 자동 레벨 (어둡거나 뿌연 사진의 밝기 범위를 넓힘)</label>
+        <label class="row">선명하게 <span class="unit"><input type="range" id="fx-sharpen" min="0" max="100" step="5"> <output id="fx-sharpen-out"></output></span></label>
+        <p class="hint">줄인 사진은 조금 흐려 보일 수 있어 20~40 정도를 권합니다. 서명과 EXIF 글자에는 적용되지 않습니다.</p>
+      </fieldset>
+
+      <fieldset>
         <legend><label class="inline"><input type="checkbox" id="sig-enabled"> 서명 넣기</label></legend>
         <div class="sub" id="sig-sub">
         <div class="row">종류
@@ -119,6 +146,9 @@
             <option value="mono">고정폭</option>
           </select>
         </label>
+        <div class="font-more" data-kind-text>
+          <button type="button" class="link" data-load-fonts>내 컴퓨터 글꼴 모두 불러오기</button>
+        </div>
         <div class="row" data-kind-text>모양
           <span class="unit"><label class="inline"><input type="checkbox" id="sig-bold"> 굵게</label>
           <input type="color" id="sig-color" aria-label="글자 색"></span>
@@ -151,6 +181,9 @@
             <option value="mono">고정폭</option>
           </select>
         </label>
+        <div class="font-more" >
+          <button type="button" class="link" data-load-fonts>내 컴퓨터 글꼴 모두 불러오기</button>
+        </div>
         <div class="row">모양
           <span class="unit"><label class="inline"><input type="checkbox" id="exif-bold"> 굵게</label>
           <input type="color" id="exif-color" aria-label="글자 색"></span>
@@ -181,6 +214,18 @@
         <label class="row" id="quality-row">화질
           <span class="unit"><input type="range" id="quality" min="50" max="100" step="1"> <output id="quality-out"></output></span>
         </label>
+        <label class="row">해상도(DPI)
+          <select id="dpi">
+            <option value="keep">원본과 같게</option>
+            <option value="72">72 (화면용)</option>
+            <option value="96">96</option>
+            <option value="150">150</option>
+            <option value="240">240</option>
+            <option value="300">300 (인쇄용)</option>
+            <option value="350">350</option>
+          </select>
+        </label>
+        <p class="hint" id="dpi-hint" hidden>WebP는 DPI 정보를 담지 않습니다.</p>
         <label class="check"><input type="checkbox" id="keep-exif"> 원본 사진 정보(EXIF) 유지</label>
         <label class="check sub-check"><input type="checkbox" id="strip-gps"> GPS 위치 정보는 지우기</label>
         <p class="hint" id="exif-keep-hint" hidden>EXIF는 JPEG로 저장할 때만 남습니다.</p>
@@ -207,6 +252,7 @@
         <button type="button" id="cancel" class="ghost" hidden>중지</button>
       </div>
       <p class="hint" id="engine-hint"></p>
+      <p class="hint">단축키: ⌘/Ctrl+Enter 변환하고 저장 · Esc 중지 · ← → 사진 넘기기 · Delete 사진 빼기</p>
       <div class="progress" id="progress" hidden>
         <div class="bar"><span id="progress-bar"></span></div>
         <p id="progress-text"></p>

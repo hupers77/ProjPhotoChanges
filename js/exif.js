@@ -101,7 +101,10 @@ function readValue(t, e) {
   }
 }
 
-const IFD0_TAGS = { 0x010F: 'Make', 0x0110: 'Model', 0x0112: 'Orientation', 0x0132: 'DateTime', 0x013B: 'Artist', 0x8298: 'Copyright' };
+const IFD0_TAGS = {
+  0x010F: 'Make', 0x0110: 'Model', 0x0112: 'Orientation', 0x0132: 'DateTime', 0x013B: 'Artist', 0x8298: 'Copyright',
+  0x011A: 'XResolution', 0x011B: 'YResolution', 0x0128: 'ResolutionUnit',
+};
 const EXIF_TAGS = {
   0x829A: 'ExposureTime', 0x829D: 'FNumber', 0x8827: 'ISO', 0x8832: 'RecommendedExposureIndex',
   0x9003: 'DateTimeOriginal', 0x9004: 'DateTimeDigitized', 0x9204: 'ExposureBias',
@@ -132,12 +135,16 @@ function parseTags(view) {
 // Copy of the original APP1 fixed up for the resized output: pixels are
 // already rotated upright, the embedded thumbnail would be stale, and GPS
 // can be wiped. Offsets stay unchanged so maker notes remain valid.
-export function exifForOutput(app1, { width, height, stripGps }) {
+export function exifForOutput(app1, { width, height, stripGps, dpi }) {
   const out = app1.slice();
   const t = tiff(new DataView(out.buffer));
   const ifd0 = t.ifd(t.u32(4));
   for (const e of ifd0.list) {
     if (e.tag === 0x0112 && e.type === 3) t.set16(e.entry + 8, 1);
+    if (dpi && (e.tag === 0x011A || e.tag === 0x011B) && e.type === 5 && e.count === 1) {
+      t.set32(e.value, dpi); t.set32(e.value + 4, 1);
+    }
+    if (dpi && e.tag === 0x0128 && e.type === 3) t.set16(e.entry + 8, 2); // inches
   }
   t.set32(ifd0.next, 0); // unlink IFD1 (thumbnail)
 
@@ -169,6 +176,24 @@ export async function insertExif(jpegBlob, app1) {
   let p = 2;
   if (buf[2] === 0xFF && buf[3] === 0xE0) p = 4 + ((buf[4] << 8) | buf[5]);
   return new Blob([buf.subarray(0, p), app1, buf.subarray(p)], { type: 'image/jpeg' });
+}
+
+// Pixels per inch the original declares (EXIF first, then JFIF), or null.
+export async function sourceDpi(file, exif) {
+  const t = exif?.tags;
+  if (t && num(t.XResolution) && t.XResolution > 1) {
+    return Math.round(t.ResolutionUnit === 3 ? t.XResolution * 2.54 : t.XResolution);
+  }
+  try {
+    const b = new Uint8Array(await file.slice(0, 20).arrayBuffer());
+    // FFD8 FFE0 len "JFIF\0" ver(2) units Xdensity Ydensity
+    if (b[2] === 0xFF && b[3] === 0xE0 && b[6] === 0x4A && b[7] === 0x46 && b[8] === 0x49 && b[9] === 0x46) {
+      const units = b[13], x = (b[14] << 8) | b[15];
+      if (units === 1 && x > 1) return x;
+      if (units === 2 && x > 1) return Math.round(x * 2.54);
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 // ---------- values for overlays and file names ----------
@@ -204,6 +229,23 @@ function camera(tags) {
   return `${brand} ${model}`;
 }
 
+// "24-70mm" (withAperture: "24-70mm f/2.8"), from LensSpecification or the lens name.
+function lensRange(tags, withAperture) {
+  let fmin, fmax, amin;
+  const spec = tags.LensSpecification;
+  if (Array.isArray(spec) && num(spec[0])) [fmin, fmax, amin] = spec;
+  else {
+    const name = `${tags.LensModel || ''}`;
+    const m = name.match(/(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*mm/i);
+    if (!m) return '';
+    fmin = +m[1]; fmax = m[2] ? +m[2] : fmin;
+    const a = name.match(/(?:f\/?|1:)\s*(\d+(?:\.\d+)?)/i);
+    amin = a ? +a[1] : null;
+  }
+  const focal = fmin === fmax || !num(fmax) ? `${trimNum(fmin, 0)}mm` : `${trimNum(fmin, 0)}-${trimNum(fmax, 0)}mm`;
+  return withAperture && num(amin) ? `${focal} f/${trimNum(amin)}` : focal;
+}
+
 function lens(tags) {
   const model = (tags.LensModel || '').trim();
   if (model && !/^-+$/.test(model)) return model;
@@ -236,6 +278,8 @@ export function exifTokens(tags, file) {
     '제조사': (tags.Make || '').trim(),
     '모델': (tags.Model || '').trim(),
     '렌즈': lens(tags),
+    '렌즈mm': lensRange(tags, false),
+    '렌즈mm조리개': lensRange(tags, true),
     '초점거리': num(tags.FocalLength) ? `${trimNum(tags.FocalLength)}mm` : '',
     '35mm환산': num(tags.FocalLength35) ? `${tags.FocalLength35}mm` : '',
     '조리개': num(tags.FNumber) ? `f/${trimNum(tags.FNumber)}` : '',
@@ -251,4 +295,4 @@ export function exifTokens(tags, file) {
   };
 }
 
-export const TOKEN_NAMES = ['카메라', '렌즈', '초점거리', '조리개', '셔터', 'ISO', '노출보정', '촬영일', '촬영시각', '촬영일시', '작가', '저작권', '파일명', '35mm환산', '제조사', '모델'];
+export const TOKEN_NAMES = ['카메라', '렌즈', '렌즈mm', '렌즈mm조리개', '초점거리', '조리개', '셔터', 'ISO', '노출보정', '촬영일', '촬영시각', '촬영일시', '작가', '저작권', '파일명', '35mm환산', '제조사', '모델'];
