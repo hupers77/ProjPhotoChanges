@@ -183,7 +183,7 @@ function onSettingsChange() {
 function updateCount() {
   $('file-count').textContent = `사진 ${items.length}장`;
   $('clear-all').disabled = running || items.length === 0;
-  $('run').disabled = running || items.length === 0;
+  $('run').disabled = $('run-top').disabled = running || items.length === 0;
 }
 
 function updateDims(it) {
@@ -435,6 +435,7 @@ function setProgress(done, total, failed) {
   $('progress').hidden = false;
   $('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
   $('progress-text').textContent = `${done} / ${total}장 처리${failed ? ` · 실패 ${failed}장` : ''}`;
+  $('top-progress').textContent = `${done} / ${total}장`;
 }
 
 async function run() {
@@ -451,7 +452,7 @@ async function run() {
   }
 
   running = true; cancelRequested = false;
-  $('cancel').hidden = false;
+  $('cancel').hidden = $('cancel-top').hidden = false;
   setPresetButtons();
   updateCount();
   const startedAt = performance.now();
@@ -502,17 +503,19 @@ async function run() {
   if (cancelRequested) {
     queue.slice(next).forEach(it => setStatus(it, '중지됨'));
     $('progress-text').textContent += ' · 중지됨';
+    $('top-progress').textContent = '중지됨';
   } else {
     $('progress-text').textContent = `완료: ${total - failed}장 저장${failed ? `, ${failed}장 실패` : ''} (${secs}초)`;
+    $('top-progress').textContent = `완료 ${total - failed}장${failed ? ` · 실패 ${failed}장` : ''}`;
   }
   running = false;
-  $('cancel').hidden = true;
+  $('cancel').hidden = $('cancel-top').hidden = true;
   setPresetButtons();
   updateCount();
 }
 
-$('run').addEventListener('click', run);
-$('cancel').addEventListener('click', () => { cancelRequested = true; });
+for (const id of ['run', 'run-top']) $(id).addEventListener('click', run);
+for (const id of ['cancel', 'cancel-top']) $(id).addEventListener('click', () => { cancelRequested = true; });
 
 // ---------- presets ----------
 

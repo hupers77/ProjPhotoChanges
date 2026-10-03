@@ -9,6 +9,9 @@
   --accent: #2563eb;
   --accent-text: #ffffff;
   --drop: #eef3fe;
+  --dz-bg: #fff6e5;
+  --dz-line: #f0b34f;
+  --dz-text: #8a5a00;
   --ok: #15803d;
   --err: #b91c1c;
   color-scheme: light;
@@ -23,6 +26,9 @@
     --accent: #5b8cff;
     --accent-text: #0b0b0b;
     --drop: #1f2a40;
+    --dz-bg: #2b2316;
+    --dz-line: #a87a2e;
+    --dz-text: #f2c879;
     --ok: #4ade80;
     --err: #f87171;
     color-scheme: dark;
@@ -38,11 +44,25 @@ body {
 }
 button, input, select { font: inherit; color: inherit; }
 
-.topbar { padding: 16px 24px 8px; }
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.logo { flex: none; width: 40px; height: 40px; border-radius: 10px; }
+.brand { min-width: 0; flex: 1; }
 .topbar h1 { margin: 0; font-size: 20px; }
+.author { font-size: 15px; font-weight: 600; color: var(--accent); text-decoration: none; margin-left: 4px; }
+.author:hover { text-decoration: underline; }
 .tagline { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.top-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+.top-actions button.primary { flex: none; padding: 9px 18px; }
+.top-progress { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 .layout {
+  margin-top: 12px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 16px;
@@ -51,19 +71,20 @@ button, input, select { font: inherit; color: inherit; }
 }
 @media (max-width: 820px) {
   .layout { grid-template-columns: 1fr; padding: 8px 16px 16px; }
-  .topbar { padding: 16px 16px 8px; }
+  .topbar { padding: 10px 16px; flex-wrap: wrap; }
+  .tagline { display: none; }
 }
 
 .dropzone {
-  border: 2px dashed var(--line);
+  border: 2px dashed var(--dz-line);
   border-radius: 12px;
   padding: 28px 16px;
   text-align: center;
-  background: var(--panel);
+  background: var(--dz-bg);
   transition: background .15s, border-color .15s;
 }
 .dropzone.over { background: var(--drop); border-color: var(--accent); }
-.dz-title { margin: 0 0 4px; font-weight: 600; }
+.dz-title { margin: 0 0 4px; font-weight: 700; color: var(--dz-text); }
 .dz-sub { margin: 0; color: var(--muted); }
 .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
 
@@ -98,8 +119,8 @@ button, input, select { font: inherit; color: inherit; }
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px 16px 16px;
-  position: sticky; top: 12px;
-  max-height: calc(100vh - 24px);
+  position: sticky; top: 76px;
+  max-height: calc(100vh - 88px);
   overflow-y: auto;
 }
 fieldset { border: 0; border-bottom: 1px solid var(--line); margin: 0; padding: 8px 0 12px; }
