@@ -22,6 +22,12 @@
         <input type="file" id="folder-input" webkitdirectory multiple hidden>
       </div>
 
+      <section id="preview" class="preview" hidden>
+        <div class="preview-head"><strong>미리보기</strong><span id="preview-info"></span></div>
+        <div class="preview-stage"><canvas id="preview-canvas"></canvas></div>
+        <p class="hint">아래 목록에서 사진을 누르면 그 사진으로 미리 봅니다.</p>
+      </section>
+
       <div class="list-head">
         <span id="file-count">사진 0장</span>
         <button type="button" id="clear-all" class="ghost" disabled>모두 비우기</button>
@@ -55,6 +61,87 @@
       </fieldset>
 
       <fieldset>
+        <legend><label class="inline"><input type="checkbox" id="sig-enabled"> 서명 넣기</label></legend>
+        <div class="sub" id="sig-sub">
+        <div class="row">종류
+          <span class="seg">
+            <label class="inline"><input type="radio" name="sig-kind" value="text" id="sig-kind-text"> 글자</label>
+            <label class="inline"><input type="radio" name="sig-kind" value="image" id="sig-kind-image"> 이미지</label>
+          </span>
+        </div>
+        <div data-kind-text>
+          <label class="row col">문구 <textarea id="sig-text" rows="2" spellcheck="false"></textarea></label>
+          <div class="chips" data-target="sig-text"></div>
+        </div>
+        <div data-kind-image>
+          <div class="sig-image">
+            <img id="sig-image-thumb" alt="" hidden>
+            <button type="button" id="sig-image-pick" class="ghost">이미지 고르기</button>
+            <button type="button" id="sig-image-clear" class="ghost" hidden>지우기</button>
+            <input type="file" id="sig-image-input" accept="image/png,image/*" hidden>
+          </div>
+          <p class="hint" id="sig-image-hint">배경이 투명한 PNG가 가장 잘 어울립니다.</p>
+          <label class="row">너비 <span class="unit"><input type="number" id="sig-image-width" min="1" max="100" step="1"> % (사진 가로 대비)</span></label>
+        </div>
+        <div class="row">위치 <div class="pos-grid" id="sig-position" role="radiogroup" aria-label="위치"></div></div>
+        <label class="row" data-kind-text>글자 크기 <span class="unit"><input type="number" id="sig-size" min="0.5" max="30" step="0.1"> %</span></label>
+        <label class="row" data-kind-text>글꼴
+          <select id="sig-font">
+            <option value="sans">고딕</option>
+            <option value="serif">명조</option>
+            <option value="mono">고정폭</option>
+          </select>
+        </label>
+        <div class="row" data-kind-text>모양
+          <span class="unit"><label class="inline"><input type="checkbox" id="sig-bold"> 굵게</label>
+          <input type="color" id="sig-color" aria-label="글자 색"></span>
+        </div>
+        <label class="row" data-kind-text>효과
+          <select id="sig-effect">
+            <option value="none">없음</option>
+            <option value="shadow">그림자</option>
+            <option value="outline">테두리</option>
+            <option value="box">배경 상자</option>
+          </select>
+        </label>
+        <label class="row">불투명도 <span class="unit"><input type="range" id="sig-opacity" min="10" max="100" step="1"> <output id="sig-opacity-out"></output></span></label>
+        <label class="row">가장자리 여백 <span class="unit"><input type="number" id="sig-margin" min="0" max="40" step="0.5"> %</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend><label class="inline"><input type="checkbox" id="exif-enabled"> 사진 정보(EXIF) 넣기</label></legend>
+        <div class="sub" id="exif-sub">
+        <label class="row col">내용 <textarea id="exif-template" rows="3" spellcheck="false"></textarea></label>
+        <div class="chips" data-target="exif-template"></div>
+        <p class="hint">값이 없는 항목은 구분자(· | ,)와 함께 자동으로 빠집니다. 줄바꿈으로 여러 줄을 만들 수 있어요.</p>
+        <div class="row">위치 <div class="pos-grid" id="exif-position" role="radiogroup" aria-label="위치"></div></div>
+        <label class="row">글자 크기 <span class="unit"><input type="number" id="exif-size" min="0.5" max="30" step="0.1"> %</span></label>
+        <label class="row">글꼴
+          <select id="exif-font">
+            <option value="sans">고딕</option>
+            <option value="serif">명조</option>
+            <option value="mono">고정폭</option>
+          </select>
+        </label>
+        <div class="row">모양
+          <span class="unit"><label class="inline"><input type="checkbox" id="exif-bold"> 굵게</label>
+          <input type="color" id="exif-color" aria-label="글자 색"></span>
+        </div>
+        <label class="row">효과
+          <select id="exif-effect">
+            <option value="none">없음</option>
+            <option value="shadow">그림자</option>
+            <option value="outline">테두리</option>
+            <option value="box">배경 상자</option>
+          </select>
+        </label>
+        <label class="row">불투명도 <span class="unit"><input type="range" id="exif-opacity" min="10" max="100" step="1"> <output id="exif-opacity-out"></output></span></label>
+        <label class="row">가장자리 여백 <span class="unit"><input type="number" id="exif-margin" min="0" max="40" step="0.5"> %</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>저장 형식</legend>
         <label class="row">형식
           <select id="format">
@@ -67,6 +154,9 @@
         <label class="row" id="quality-row">화질
           <span class="unit"><input type="range" id="quality" min="50" max="100" step="1"> <output id="quality-out"></output></span>
         </label>
+        <label class="check"><input type="checkbox" id="keep-exif"> 원본 사진 정보(EXIF) 유지</label>
+        <label class="check sub-check"><input type="checkbox" id="strip-gps"> GPS 위치 정보는 지우기</label>
+        <p class="hint" id="exif-keep-hint" hidden>EXIF는 JPEG로 저장할 때만 남습니다.</p>
       </fieldset>
 
       <fieldset>
@@ -74,7 +164,7 @@
         <label class="row col">규칙
           <input type="text" id="name-pattern" spellcheck="false">
         </label>
-        <p class="hint">{원본} 원본 이름, {순번} {순번3} {순번4} 순번, {날짜} 파일 날짜(YYYYMMDD), {시간} HHMMSS</p>
+        <p class="hint">{원본} 원본 이름, {순번} {순번3} {순번4} 순번, {날짜} 촬영 날짜(YYYYMMDD), {시간} 촬영 시각(HHMMSS). 촬영 정보가 없으면 파일 날짜를 씁니다.</p>
         <p class="hint">예시: <code id="name-example"></code></p>
       </fieldset>
 

@@ -20,8 +20,36 @@ export const DEFAULT_SETTINGS = {
     quality: 92,          // 50-100, used for JPEG/WebP
     namePattern: '{원본}_resized',
     saveTarget: 'folder', // folder | download
+    keepExif: true,       // copy the original EXIF into JPEG outputs
+    stripGps: true,       // ...minus the GPS location
   },
-  // Step 2 adds: signature: {...}, exifOverlay: {...}
+  // position: t|m|b + l|c|r. size/margin: % of the photo's shorter side.
+  signature: {
+    enabled: false,
+    kind: 'text',         // text | image
+    text: '© 내 이름',
+    imageWidth: 20,       // image: % of the photo width
+    position: 'br',
+    size: 4,
+    margin: 3,
+    font: 'sans',         // sans | serif | mono
+    bold: true,
+    color: '#ffffff',
+    opacity: 85,
+    effect: 'shadow',     // none | shadow | outline | box
+  },
+  exifOverlay: {
+    enabled: false,
+    template: '{카메라} · {렌즈}\n{초점거리} · {조리개} · {셔터} · {ISO} · {촬영일시}',
+    position: 'bl',
+    size: 2.2,
+    margin: 3,
+    font: 'sans',
+    bold: false,
+    color: '#ffffff',
+    opacity: 90,
+    effect: 'shadow',
+  },
 };
 
 export function cloneDefaults() {

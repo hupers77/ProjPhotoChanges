@@ -1,8 +1,12 @@
 import { loadSettings, saveSettings } from './settings.js';
 import { computeTargetSize } from './resize.js';
 import { buildFileName } from './filename.js';
-import { processFile, outputMime } from './pipeline.js';
+import { processFile, outputMime, registerOverlay, loadPreviewBase, renderPreview } from './pipeline.js';
 import { canPickFolder, createSaver } from './exporter.js';
+import { readExif, exifTokens, photoDate, TOKEN_NAMES } from './exif.js';
+import { drawOverlays, setSignatureImage, getSignatureImage } from './overlay.js';
+
+registerOverlay(drawOverlays);
 
 const $ = (id) => document.getElementById(id);
 const settings = loadSettings();
@@ -32,7 +36,70 @@ const bindings = [
   ['format', 'output', 'format'],
   ['quality', 'output', 'quality', Number],
   ['name-pattern', 'output', 'namePattern'],
+  ['keep-exif', 'output', 'keepExif'],
+  ['strip-gps', 'output', 'stripGps'],
+  ['sig-text', 'signature', 'text'],
+  ['sig-image-width', 'signature', 'imageWidth', Number],
+  ['exif-template', 'exifOverlay', 'template'],
 ];
+// Signature and EXIF text share the same style controls, prefixed sig- / exif-.
+const OVERLAY_GROUPS = [['sig', 'signature'], ['exif', 'exifOverlay']];
+for (const [p, group] of OVERLAY_GROUPS) {
+  bindings.push(
+    [`${p}-enabled`, group, 'enabled'],
+    [`${p}-size`, group, 'size', Number],
+    [`${p}-font`, group, 'font'],
+    [`${p}-bold`, group, 'bold'],
+    [`${p}-color`, group, 'color'],
+    [`${p}-effect`, group, 'effect'],
+    [`${p}-opacity`, group, 'opacity', Number],
+    [`${p}-margin`, group, 'margin', Number],
+  );
+}
+
+const POSITIONS = ['tl', 'tc', 'tr', 'ml', 'mc', 'mr', 'bl', 'bc', 'br'];
+const POSITION_LABEL = { t: '위', m: '가운데', b: '아래', l: '왼쪽', c: '가운데', r: '오른쪽' };
+function buildPositionGrids() {
+  for (const [p, group] of OVERLAY_GROUPS) {
+    const grid = $(`${p}-position`);
+    for (const pos of POSITIONS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.pos = pos;
+      b.setAttribute('role', 'radio');
+      b.title = pos === 'mc' ? '정가운데' : `${POSITION_LABEL[pos[0]]} ${POSITION_LABEL[pos[1]]}`;
+      b.setAttribute('aria-label', b.title);
+      b.addEventListener('click', () => {
+        settings[group].position = pos;
+        saveSettings(settings);
+        refreshFormState();
+      });
+      grid.appendChild(b);
+    }
+  }
+}
+
+// Token chips insert "{토큰}" at the cursor of their textarea.
+function buildChips() {
+  document.querySelectorAll('.chips').forEach(box => {
+    const target = $(box.dataset.target);
+    for (const name of TOKEN_NAMES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = name;
+      b.title = `{${name}} 넣기`;
+      b.addEventListener('click', () => {
+        const tok = `{${name}}`;
+        const { selectionStart: a, selectionEnd: z, value } = target;
+        target.value = value.slice(0, a) + tok + value.slice(z);
+        target.focus();
+        target.setSelectionRange(a + tok.length, a + tok.length);
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      box.appendChild(b);
+    }
+  });
+}
 
 function fillForm() {
   for (const [id, group, key] of bindings) {
@@ -40,6 +107,8 @@ function fillForm() {
     if (el.type === 'checkbox') el.checked = settings[group][key];
     else el.value = settings[group][key];
   }
+  $('sig-kind-text').checked = settings.signature.kind !== 'image';
+  $('sig-kind-image').checked = settings.signature.kind === 'image';
   $('save-folder').checked = settings.output.saveTarget === 'folder';
   $('save-download').checked = settings.output.saveTarget === 'download';
   if (!canPickFolder) $('save-folder').disabled = true;
@@ -51,9 +120,10 @@ function readForm() {
     if (el.type === 'checkbox') settings[group][key] = el.checked;
     else if (cast === Number) {
       const v = Number(el.value);
-      if (Number.isFinite(v) && v > 0) settings[group][key] = v;
+      if (Number.isFinite(v) && (el.min === '0' ? v >= 0 : v > 0)) settings[group][key] = v;
     } else settings[group][key] = el.value;
   }
+  settings.signature.kind = $('sig-kind-image').checked ? 'image' : 'text';
   settings.output.saveTarget = $('save-folder').checked ? 'folder' : 'download';
 }
 
@@ -65,12 +135,29 @@ function refreshFormState() {
   const fmt = settings.output.format;
   $('quality-row').hidden = fmt === 'image/png';
   $('quality-out').textContent = settings.output.quality;
+  $('strip-gps').disabled = !settings.output.keepExif;
 
-  const sample = items[0]?.file;
-  const mime = sample ? outputMime(sample, fmt) : (fmt === 'same' ? 'image/jpeg' : fmt);
+  const sample = items[0];
+  const mime = sample ? outputMime(sample.file, fmt) : (fmt === 'same' ? 'image/jpeg' : fmt);
+  $('exif-keep-hint').hidden = !settings.output.keepExif || mime === 'image/jpeg';
   $('name-example').textContent = buildFileName(settings.output.namePattern, {
-    fileName: sample?.name || 'IMG_0001.JPG', index: 0, date: sample ? new Date(sample.lastModified) : new Date(),
+    fileName: sample?.file.name || 'IMG_0001.JPG', index: 0, date: sample ? photoDate(sample.file, sample.exif) : new Date(),
   }, mime);
+
+  const sigKind = settings.signature.kind;
+  document.querySelectorAll('#sig-sub [data-kind-text]').forEach(el => { el.hidden = sigKind !== 'text'; });
+  document.querySelectorAll('#sig-sub [data-kind-image]').forEach(el => { el.hidden = sigKind !== 'image'; });
+  for (const [p, group] of OVERLAY_GROUPS) {
+    $(`${p}-sub`).hidden = !settings[group].enabled;
+    $(`${p}-opacity-out`).textContent = `${settings[group].opacity}%`;
+    $(`${p}-position`).querySelectorAll('button').forEach(b => {
+      b.setAttribute('aria-checked', String(b.dataset.pos === settings[group].position));
+    });
+  }
+  const hasSig = !!getSignatureImage();
+  $('sig-image-thumb').hidden = !hasSig;
+  $('sig-image-clear').hidden = !hasSig;
+  $('sig-image-pick').textContent = hasSig ? '다른 이미지' : '이미지 고르기';
 
   $('save-hint').textContent = canPickFolder
     ? (settings.output.saveTarget === 'folder'
@@ -79,6 +166,7 @@ function refreshFormState() {
     : '이 브라우저는 폴더 저장을 지원하지 않아 한 장씩 다운로드됩니다. 처음에 "여러 파일 다운로드 허용"을 물으면 허용을 눌러 주세요. 폴더에 바로 저장하려면 Chrome이나 Edge를 쓰세요.';
 
   for (const it of items) updateDims(it);
+  schedulePreview();
 }
 
 function onSettingsChange() {
@@ -117,12 +205,18 @@ function addFiles(files) {
       <div class="meta"><div class="name"></div><div class="dims"></div><div class="status"></div></div>`;
     it.el.querySelector('.name').textContent = file.name;
     it.el.querySelector('.name').title = file.name;
-    it.el.querySelector('.remove').addEventListener('click', () => removeItem(it));
+    it.el.querySelector('.remove').addEventListener('click', (e) => { e.stopPropagation(); removeItem(it); });
+    it.el.addEventListener('click', () => selectPreview(it));
     $('file-list').appendChild(it.el);
     items.push(it);
     updateDims(it);
     thumbQueue.push(it);
+    readExif(file).then(exif => {
+      it.exif = exif;
+      if (it === items[0]) refreshFormState();
+    });
   }
+  if (!previewItem && items.length) selectPreview(items[0]);
   pumpThumbs();
   updateCount();
   refreshFormState();
@@ -136,6 +230,7 @@ function removeItem(it) {
   if (img.src) URL.revokeObjectURL(img.src);
   it.el.remove();
   it.removed = true;
+  if (previewItem === it) selectPreview(items[0] || null);
   updateCount();
   refreshFormState();
 }
@@ -176,6 +271,96 @@ async function makeThumb(it) {
     img.src = url;
   }
   if (!it.removed) updateDims(it);
+}
+
+// ---------- preview ----------
+
+let previewItem = null;
+let previewBase = null;   // decoded, reduced copy of previewItem
+let previewSeq = 0;
+let previewPending = false;
+
+async function selectPreview(it) {
+  previewItem = it;
+  previewBase = null;
+  items.forEach(x => x.el.classList.toggle('selected', x === it));
+  $('preview').hidden = !it;
+  if (!it) return;
+  const seq = ++previewSeq;
+  $('preview-info').textContent = '불러오는 중…';
+  try {
+    const pb = await loadPreviewBase(it.file);
+    if (seq !== previewSeq) return;
+    previewBase = pb;
+    schedulePreview();
+  } catch {
+    if (seq === previewSeq) $('preview-info').textContent = '이 브라우저에서 미리 볼 수 없는 형식';
+  }
+}
+
+function schedulePreview() {
+  if (previewPending || !previewBase) return;
+  previewPending = true;
+  requestAnimationFrame(async () => {
+    previewPending = false;
+    const pb = previewBase;
+    if (!pb) return;
+    const index = Math.max(0, items.indexOf(previewItem));
+    const { width, height } = await renderPreview($('preview-canvas'), pb, index, settings);
+    const t = exifTokens(pb.exif?.tags, pb.file);
+    const bits = [`저장 크기 ${width}×${height}`, t['카메라'], t['촬영일시']].filter(Boolean);
+    if (!pb.exif) bits.push('EXIF 없음');
+    $('preview-info').textContent = bits.join(' · ');
+  });
+}
+
+// ---------- signature image ----------
+
+const SIG_IMAGE_KEY = 'photoworks-web:signature-image:v1';
+
+async function useSignatureImage(blob, remember) {
+  let bmp;
+  try { bmp = await createImageBitmap(blob); } catch {
+    alert('이 이미지를 열 수 없습니다. PNG나 JPEG 파일을 골라 주세요.');
+    return;
+  }
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
+  });
+  setSignatureImage(bmp);
+  $('sig-image-thumb').src = dataUrl;
+  let hint = `${bmp.width}×${bmp.height} 이미지. 배경이 투명한 PNG가 가장 잘 어울립니다.`;
+  if (remember) {
+    try { localStorage.setItem(SIG_IMAGE_KEY, dataUrl); } catch {
+      hint += ' 파일이 커서 브라우저에 기억하지 못했어요. 다음에 다시 골라 주세요.';
+    }
+  }
+  $('sig-image-hint').textContent = hint;
+  refreshFormState();
+}
+
+$('sig-image-pick').addEventListener('click', () => $('sig-image-input').click());
+$('sig-image-input').addEventListener('change', e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) useSignatureImage(f, true);
+});
+$('sig-image-clear').addEventListener('click', () => {
+  setSignatureImage(null);
+  try { localStorage.removeItem(SIG_IMAGE_KEY); } catch { /* ignore */ }
+  $('sig-image-thumb').removeAttribute('src');
+  $('sig-image-hint').textContent = '배경이 투명한 PNG가 가장 잘 어울립니다.';
+  refreshFormState();
+});
+
+async function restoreSignatureImage() {
+  let dataUrl = null;
+  try { dataUrl = localStorage.getItem(SIG_IMAGE_KEY); } catch { /* ignore */ }
+  if (!dataUrl) return;
+  try { await useSignatureImage(await (await fetch(dataUrl)).blob(), false); } catch { /* ignore */ }
 }
 
 // ---------- intake: drag & drop, pickers ----------
@@ -237,6 +422,8 @@ function setProgress(done, total, failed) {
 async function run() {
   readForm();
   saveSettings(settings);
+  if (settings.signature.enabled && settings.signature.kind === 'image' && !getSignatureImage()
+      && !confirm('서명 이미지를 아직 고르지 않았습니다. 서명 없이 저장할까요?')) return;
   let saver;
   try {
     saver = await createSaver(settings.output.saveTarget);
@@ -299,7 +486,10 @@ $('cancel').addEventListener('click', () => { cancelRequested = true; });
 
 // ---------- init ----------
 
+buildPositionGrids();
+buildChips();
 fillForm();
+restoreSignatureImage();
 document.querySelector('.settings-pane').addEventListener('input', onSettingsChange);
 document.querySelector('.settings-pane').addEventListener('change', onSettingsChange);
 refreshFormState();
