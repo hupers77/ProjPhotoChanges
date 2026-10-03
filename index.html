@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>포토웍스 웹</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>포토웍스 웹</h1>
+    <p class="tagline">사진은 서버로 올라가지 않고 이 브라우저 안에서만 처리됩니다.</p>
+  </header>
+
+  <main class="layout">
+    <section class="files-pane">
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="사진 추가">
+        <p class="dz-title">사진이나 폴더를 여기에 끌어다 놓으세요</p>
+        <p class="dz-sub">또는 <button type="button" id="pick-files" class="link">사진 선택</button>
+          · <button type="button" id="pick-folder" class="link">폴더 선택</button></p>
+        <input type="file" id="file-input" accept="image/*" multiple hidden>
+        <input type="file" id="folder-input" webkitdirectory multiple hidden>
+      </div>
+
+      <div class="list-head">
+        <span id="file-count">사진 0장</span>
+        <button type="button" id="clear-all" class="ghost" disabled>모두 비우기</button>
+      </div>
+      <ul id="file-list" class="file-list"></ul>
+    </section>
+
+    <aside class="settings-pane">
+      <fieldset>
+        <legend>크기 조정</legend>
+        <label class="row">방식
+          <select id="resize-mode">
+            <option value="long">긴 변 기준</option>
+            <option value="short">짧은 변 기준</option>
+            <option value="width">가로 기준</option>
+            <option value="height">세로 기준</option>
+            <option value="box">가로×세로 안에 맞추기</option>
+            <option value="percent">비율(%)</option>
+            <option value="none">원본 크기 유지</option>
+          </select>
+        </label>
+        <label class="row" data-for="long">긴 변 <span class="unit"><input type="number" id="long-edge" min="1" step="1"> px</span></label>
+        <label class="row" data-for="short">짧은 변 <span class="unit"><input type="number" id="short-edge" min="1" step="1"> px</span></label>
+        <label class="row" data-for="width">가로 <span class="unit"><input type="number" id="width" min="1" step="1"> px</span></label>
+        <label class="row" data-for="height">세로 <span class="unit"><input type="number" id="height" min="1" step="1"> px</span></label>
+        <div class="row" data-for="box">상자
+          <span class="unit"><input type="number" id="box-w" min="1" step="1"> × <input type="number" id="box-h" min="1" step="1"> px</span>
+        </div>
+        <label class="row" data-for="percent">비율 <span class="unit"><input type="number" id="percent" min="1" max="1000" step="1"> %</span></label>
+        <label class="check"><input type="checkbox" id="no-enlarge"> 원본보다 크게 늘리지 않기</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>저장 형식</legend>
+        <label class="row">형식
+          <select id="format">
+            <option value="same">원본과 같게</option>
+            <option value="image/jpeg">JPEG</option>
+            <option value="image/png">PNG</option>
+            <option value="image/webp">WebP</option>
+          </select>
+        </label>
+        <label class="row" id="quality-row">화질
+          <span class="unit"><input type="range" id="quality" min="50" max="100" step="1"> <output id="quality-out"></output></span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>파일 이름</legend>
+        <label class="row col">규칙
+          <input type="text" id="name-pattern" spellcheck="false">
+        </label>
+        <p class="hint">{원본} 원본 이름, {순번} {순번3} {순번4} 순번, {날짜} 파일 날짜(YYYYMMDD), {시간} HHMMSS</p>
+        <p class="hint">예시: <code id="name-example"></code></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>저장 위치</legend>
+        <label class="radio"><input type="radio" name="save-target" value="folder" id="save-folder"> 폴더를 골라 그 안에 바로 저장</label>
+        <label class="radio"><input type="radio" name="save-target" value="download" id="save-download"> 다운로드 폴더로 한 장씩 내려받기</label>
+        <p class="hint" id="save-hint"></p>
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" id="run" class="primary" disabled>변환하고 저장</button>
+        <button type="button" id="cancel" class="ghost" hidden>중지</button>
+      </div>
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><span id="progress-bar"></span></div>
+        <p id="progress-text"></p>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
