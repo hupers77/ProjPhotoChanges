@@ -211,3 +211,16 @@ button.ghost.small { padding: 1px 8px; font-size: 12px; border-radius: 6px; }
 .font-more { margin: -2px 0 6px; text-align: right; font-size: 12px; }
 #sig-font, #exif-font { max-width: 170px; }
 .summary { color: var(--ok); }
+
+.legend-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+/* Compact mode: hide explanations (warnings stay) and tighten spacing. */
+.settings-pane.compact .hint:not(#exif-keep-hint):not(#dpi-hint),
+.settings-pane.compact .explain { display: none; }
+.settings-pane.compact fieldset { padding: 4px 0 6px; }
+.settings-pane.compact legend { margin-bottom: 2px; }
+.settings-pane.compact .row { margin: 2px 0; }
+.settings-pane.compact .check, .settings-pane.compact .radio { margin: 2px 0; }
+.settings-pane.compact .chips { margin: 2px 0; }
+.settings-pane.compact .preset-actions { margin-top: 4px; }
+.settings-pane.compact input[type=number], .settings-pane.compact input[type=text], .settings-pane.compact select { padding: 3px 8px; }
+.settings-pane.compact .actions { margin-top: 6px; }

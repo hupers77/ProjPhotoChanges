@@ -60,7 +60,9 @@
 
     <aside class="settings-pane">
       <fieldset class="presets">
-        <legend>프리셋</legend>
+        <legend class="legend-row">프리셋
+          <button type="button" id="compact-toggle" class="ghost small" aria-pressed="false" title="설정 설명을 숨기고 줄 간격을 좁힙니다">간단히 보기</button>
+        </legend>
         <select id="preset-select" aria-label="프리셋"></select>
         <div class="preset-actions">
           <button type="button" id="preset-save" class="ghost">지금 설정 저장</button>
@@ -109,7 +111,7 @@
             <option value="270">왼쪽으로 90°</option>
           </select>
         </label>
-        <label class="check"><input type="checkbox" id="fx-autolevel"> 자동 레벨 (어둡거나 뿌연 사진의 밝기 범위를 넓힘)</label>
+        <label class="check"><input type="checkbox" id="fx-autolevel"> 자동 레벨 <span class="explain">(어둡거나 뿌연 사진의 밝기 범위를 넓힘)</span></label>
         <label class="row">선명하게 <span class="unit"><input type="range" id="fx-sharpen" min="0" max="100" step="5"> <output id="fx-sharpen-out"></output></span></label>
         <p class="hint">줄인 사진은 조금 흐려 보일 수 있어 20~40 정도를 권합니다. 서명과 EXIF 글자에는 적용되지 않습니다.</p>
       </fieldset>

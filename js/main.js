@@ -639,6 +639,18 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || ['localho
 
 // ---------- presets ----------
 
+const COMPACT_KEY = 'photoworks-web:compact:v1';
+function setCompact(on) {
+  document.querySelector('.settings-pane').classList.toggle('compact', on);
+  $('compact-toggle').textContent = on ? '설명 보기' : '간단히 보기';
+  $('compact-toggle').setAttribute('aria-pressed', String(on));
+  try { localStorage.setItem(COMPACT_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+$('compact-toggle').addEventListener('click', () => {
+  setCompact(!document.querySelector('.settings-pane').classList.contains('compact'));
+});
+try { setCompact(localStorage.getItem(COMPACT_KEY) === '1'); } catch { setCompact(false); }
+
 let currentPreset = '';
 
 function fillPresetSelect() {
