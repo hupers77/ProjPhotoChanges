@@ -1,6 +1,6 @@
 // Output file naming from a token pattern.
 
-const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/x-icon': 'ico' };
 
 export function extensionFor(mime) { return EXT[mime] || 'jpg'; }
 

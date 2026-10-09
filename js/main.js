@@ -140,7 +140,10 @@ function refreshFormState() {
   $('no-enlarge').closest('label').hidden = mode === 'none';
 
   const fmt = settings.output.format;
-  $('quality-row').hidden = fmt === 'image/png';
+  const isIcon = fmt === 'image/x-icon';
+  $('quality-row').hidden = fmt === 'image/png' || isIcon;
+  $('output-extra').hidden = isIcon;
+  $('icon-hint').hidden = !isIcon;
   $('quality-out').textContent = settings.output.quality;
   $('strip-gps').disabled = !settings.output.keepExif;
   $('fx-sharpen-out').textContent = settings.effects.sharpen > 0 ? settings.effects.sharpen : '끔';
@@ -196,6 +199,7 @@ function updateCount() {
 function updateDims(it) {
   const el = it.el.querySelector('.dims');
   if (!it.width) { el.textContent = '크기 읽는 중…'; return; }
+  if (settings.output.format === 'image/x-icon') { el.textContent = `${it.width}×${it.height} → 아이콘 32·16`; return; }
   const t = targetSize(it.width, it.height, settings);
   el.textContent = `${it.width}×${it.height} → ${t.width}×${t.height}`;
 }
@@ -340,9 +344,9 @@ function schedulePreview() {
     const pb = previewBase;
     if (!pb) return;
     const index = Math.max(0, items.indexOf(previewItem));
-    const { width, height } = await renderPreview($('preview-canvas'), pb, index, settings);
+    const { width, height, icon } = await renderPreview($('preview-canvas'), pb, index, settings);
     const t = exifTokens(pb.exif?.tags, pb.file);
-    const bits = [`저장 크기 ${width}×${height}`, t['카메라'], t['촬영일시']].filter(Boolean);
+    const bits = [icon ? '아이콘 32×32·16×16 (32px 확대 보기)' : `저장 크기 ${width}×${height}`, t['카메라'], t['촬영일시']].filter(Boolean);
     if (!pb.exif) bits.push('EXIF 없음');
     $('preview-info').textContent = bits.join(' · ');
   });

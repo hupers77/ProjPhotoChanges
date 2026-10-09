@@ -6,6 +6,7 @@ import { buildFileName } from './filename.js';
 import { readExif, exifForOutput, insertExif, exifTokens, photoDate, sourceDpi } from './exif.js';
 import { swapsSides, rotateCanvas, drawRotated, applyEffects } from './effects.js';
 import { applyDpi } from './dpi.js';
+import { ICON_MIME, iconCanvases, encodeIco } from './icon.js';
 
 const overlays = [];
 
@@ -21,6 +22,7 @@ export function outputMime(file, format) {
 
 // Output size for a source of srcW x srcH, after the optional rotation.
 export function targetSize(srcW, srcH, settings) {
+  if (settings.output.format === ICON_MIME) return { width: 32, height: 32 };
   const swap = swapsSides(settings.effects?.rotate);
   return computeTargetSize(swap ? srcH : srcW, swap ? srcW : srcH, settings.resize);
 }
@@ -64,7 +66,23 @@ async function encode(canvas, mime, quality) {
     canvas.toBlob(b => (b ? resolve(b) : reject(new Error('인코딩 실패'))), mime, quality));
 }
 
+// Icon output ignores every other setting: just the 16/32 px square icon.
+async function processIcon(file, index, settings) {
+  const exif = await readExif(file);
+  const img = await decode(file);
+  try {
+    const blob = await encodeIco(iconCanvases(img.source, img.width, img.height));
+    const name = buildFileName(settings.output.namePattern, {
+      fileName: file.name, index, date: photoDate(file, exif),
+    }, ICON_MIME);
+    return { blob, name, width: 32, height: 32 };
+  } finally {
+    img.close();
+  }
+}
+
 export async function processFile(file, index, settings) {
+  if (settings.output.format === ICON_MIME) return processIcon(file, index, settings);
   const exif = await readExif(file);
   const img = await decode(file);
   try {
@@ -117,6 +135,16 @@ export async function loadPreviewBase(file, maxEdge = 1600) {
 
 // Draws what the saved file will look like, scaled down, into a visible canvas.
 export async function renderPreview(canvas, pb, index, settings) {
+  if (settings.output.format === ICON_MIME) {
+    // Show the 32 px icon blown up with hard pixels, as it will really look.
+    const [icon32] = iconCanvases(pb.base, pb.base.width, pb.base.height);
+    const edge = 256;
+    canvas.width = edge; canvas.height = edge;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(icon32.canvas, 0, 0, edge, edge);
+    return { width: 32, height: 32, icon: true };
+  }
   const rot = settings.effects?.rotate || 0;
   const { width, height } = targetSize(pb.srcWidth, pb.srcHeight, settings);
   const bw = swapsSides(rot) ? pb.base.height : pb.base.width;

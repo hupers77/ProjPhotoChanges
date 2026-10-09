@@ -212,11 +212,14 @@
             <option value="image/jpeg">JPEG</option>
             <option value="image/png">PNG</option>
             <option value="image/webp">WebP</option>
+            <option value="image/x-icon">아이콘 (ICO · 32/16px)</option>
           </select>
         </label>
+        <p class="hint" id="icon-hint" hidden>아이콘은 사진 가운데를 정사각형으로 잘라 32×32·16×16 두 크기를 담은 .ico 파일 하나로 저장합니다. 크기 조정·보정·서명·사진 정보·DPI·EXIF 설정은 쓰지 않습니다.</p>
         <label class="row" id="quality-row">화질
           <span class="unit"><input type="range" id="quality" min="50" max="100" step="1"> <output id="quality-out"></output></span>
         </label>
+        <div id="output-extra">
         <label class="row">해상도(DPI)
           <select id="dpi">
             <option value="keep">원본과 같게</option>
@@ -232,6 +235,7 @@
         <label class="check"><input type="checkbox" id="keep-exif"> 원본 사진 정보(EXIF) 유지</label>
         <label class="check sub-check"><input type="checkbox" id="strip-gps"> GPS 위치 정보는 지우기</label>
         <p class="hint" id="exif-keep-hint" hidden>EXIF는 JPEG로 저장할 때만 남습니다.</p>
+        </div>
       </fieldset>
 
       <fieldset>
