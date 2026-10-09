@@ -66,16 +66,18 @@ async function encode(canvas, mime, quality) {
     canvas.toBlob(b => (b ? resolve(b) : reject(new Error('인코딩 실패'))), mime, quality));
 }
 
-// Icon output ignores every other setting: just the 16/32 px square icon.
+// Icon output ignores every other setting: one .ico per size (name_32.ico, name_16.ico).
 async function processIcon(file, index, settings) {
   const exif = await readExif(file);
   const img = await decode(file);
   try {
-    const blob = await encodeIco(iconCanvases(img.source, img.width, img.height));
     const name = buildFileName(settings.output.namePattern, {
       fileName: file.name, index, date: photoDate(file, exif),
     }, ICON_MIME);
-    return { blob, name, width: 32, height: 32 };
+    const stem = name.slice(0, -'.ico'.length);
+    const files = await Promise.all(iconCanvases(img.source, img.width, img.height).map(async (icon) =>
+      ({ name: `${stem}_${icon.size}.ico`, blob: await encodeIco([icon]) })));
+    return { files, width: 32, height: 32 };
   } finally {
     img.close();
   }

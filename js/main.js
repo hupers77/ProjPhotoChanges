@@ -154,7 +154,7 @@ function refreshFormState() {
   $('dpi-hint').hidden = settings.output.dpi === 'keep' || mime !== 'image/webp';
   $('name-example').textContent = buildFileName(settings.output.namePattern, {
     fileName: sample?.file.name || 'IMG_0001.JPG', index: 0, date: sample ? photoDate(sample.file, sample.exif) : new Date(),
-  }, mime);
+  }, mime).replace(/^(.*)\.ico$/, '$1_32.ico, $1_16.ico');
 
   const sigKind = settings.signature.kind;
   document.querySelectorAll('#sig-sub [data-kind-text]').forEach(el => { el.hidden = sigKind !== 'text'; });
@@ -517,9 +517,12 @@ async function run() {
       try {
         const out = await convert(it, index);
         await turn(index);
-        const finalName = await saver.save(out.name, out.blob);
-        inBytes += it.file.size; outBytes += out.blob.size;
-        setStatus(it, `저장됨: ${finalName} (${formatBytes(it.file.size)} → ${formatBytes(out.blob.size)})`, 'done');
+        const files = out.files || [{ name: out.name, blob: out.blob }];
+        const names = [];
+        let size = 0;
+        for (const f of files) { names.push(await saver.save(f.name, f.blob)); size += f.blob.size; }
+        inBytes += it.file.size; outBytes += size;
+        setStatus(it, `저장됨: ${names.join(', ')} (${formatBytes(it.file.size)} → ${formatBytes(size)})`, 'done');
       } catch (err) {
         failed++;
         setStatus(it, `실패: ${err?.message || err}`, 'error');
